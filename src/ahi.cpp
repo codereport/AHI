@@ -274,6 +274,9 @@ namespace APLCharSet {
     auto const DIVIDE               = RECIPROCAL;
     auto const LOGICAL_AND          = "∧";
     auto const LOGICAL_OR           = "∨";
+    auto const ENLIST               = "∊";
+    auto const MEMBERSHIP           = ENLIST;
+    auto const FIND                 = "⍷";
 }
 
 // TODO these aren't actually verbs
@@ -306,6 +309,8 @@ auto getAplCharFromShortCut(char c) -> std::string {
         case '=': return RECIPROCAL;
         case '0': return LOGICAL_AND;
         case '9': return LOGICAL_OR;
+        case 'e': return ENLIST;
+        case 'E': return FIND;
         default:  return "unkown character"s + c;
     }
 }
