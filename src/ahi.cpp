@@ -642,8 +642,21 @@ auto evaluate_transform_verb(noun const& lhs,
             std::bind(binop, l, std::placeholders::_1));
 
         return res;
-    }
-    else if (lhs.type() == noun_type::VECTOR && 
+    } else if (lhs.type() == noun_type::VECTOR && 
+               rhs.type() == noun_type::SCALAR) {
+        // TODO investigate why `r` can't be a reference
+        auto const l = std::get<vector>(lhs.data());
+        auto const r = std::get<scalar>(rhs.data());
+        std::vector<int> res(l.size());
+
+        std::transform(
+            std::cbegin(l),
+            std::cend(l),
+            std::begin(res),
+            std::bind(binop, std::placeholders::_1, r));
+
+        return res;
+    } else if (lhs.type() == noun_type::VECTOR && 
              rhs.type() == noun_type::VECTOR) {
         // TODO investigate why `l` and `r` can't be a reference
         auto const l = std::get<vector>(lhs.data());
@@ -1053,9 +1066,6 @@ auto eval(std::stack<token> tokens, bool first_level) -> noun {
                 // process DYADIC
                 auto lhs = std::get<noun>(tokens.top());
                 tokens.pop();
-                // TODO this is a hack that probably doesn't work for non-associative
-                // binary operations (like - (minus))
-                if (lhs.rank() > rhs.rank()) std::swap(lhs, rhs);
                 auto exp_new_subj = evaluate_dyadic(lhs, verb, rhs);
                 if (not exp_new_subj.has_value()) {
                     std::cout << COLOR_ERROR << exp_new_subj.error();
@@ -1128,7 +1138,7 @@ void run_tests() {
               << unit_test("4,4+(×8-4)×⍳|8-4", "4 5 6 7 8") << "\n\r"   // TO idiom
               << unit_test("1≠(2/1),1+⍳2",     "0 0 1 1")   << "\n\r"
               << unit_test("((2/1),1+⍳2)≠1",   "0 0 1 1")   << "\n\r"
-              << unit_test("(∨\(⍳3)≠1)/1 2 3", "2 3")       << "\n\r";  // LTRIM idiom
+              << unit_test("(∨\\(⍳3)≠1)/⍳3",    "2 3")       << "\n\r";  // LTRIM idiom
               
               // ⍴∘⍴¨x ← 'abc' 123 (3 3⍴⍳9)
               // (1,2>/x)⊂x ← (4⌽⍳9),2⌽⍳6
