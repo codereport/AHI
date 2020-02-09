@@ -249,6 +249,8 @@ namespace APLCharSet {
     auto const CATENATE             = RAVEL;
     auto const CEILING              = "⌈";
     auto const MAXIMUM              = CEILING;
+    auto const FLOOR                = "⌊";
+    auto const MINIMUM              = FLOOR;
     auto const ENCLOSE              = "⊂";
     auto const PARTITIONED_ENCLOSE  = ENCLOSE;
     auto const FIRST                = "⊃"; // DISCLOSE ??
@@ -311,6 +313,7 @@ auto getAplCharFromShortCut(char c) -> std::string {
         case '9': return LOGICAL_OR;
         case 'e': return ENLIST;
         case 'E': return FIND;
+        case 'd': return FLOOR;
         default:  return "unkown character"s + c;
     }
 }
@@ -703,6 +706,18 @@ auto evaluate_multiply(noun const& lhs, noun const& rhs) -> expected_noun {
     return evaluate_transform_verb(lhs, rhs, std::multiplies{}, "mulitply"s);
 }
 
+auto evaluate_maximum(noun const& lhs, noun const& rhs) -> expected_noun {
+    return evaluate_transform_verb(lhs, rhs,
+        [](auto const& a, auto const& b) { return std::max(a, b); },
+        "maximum"s);
+}
+
+auto evaluate_minimum(noun const& lhs, noun const& rhs) -> expected_noun {
+    return evaluate_transform_verb(lhs, rhs,
+        [](auto const& a, auto const& b) { return std::min(a, b); },
+        "minimum"s);
+}
+
 auto evaluate_rotate(noun const& lhs,
                      noun rhs) -> expected_noun {
     if (lhs.type() == noun_type::SCALAR
@@ -908,13 +923,20 @@ auto evaluate_dyadic(noun    const& lhs,
     else if (verb == SUBTRACT)            return evaluate_subtract            (lhs, rhs);
     else if (verb == ADD)                 return evaluate_add                 (lhs, rhs);
     else if (verb == MULTIPLY)            return evaluate_multiply            (lhs, rhs);
+    else if (verb == MAXIMUM)             return evaluate_maximum             (lhs, rhs);
+    else if (verb == MINIMUM)             return evaluate_minimum             (lhs, rhs);
     else                           return error{"dyadic " + verb + " not supported yet"};
 }
 
 auto is_composable_with_binary_op_adverb(std::string_view s) -> bool {
-    if (s == "+" || s == "×" ||
-        s == "-" || s == "÷" ||
-        s == "∧" || s == "∨") return true;
+
+    auto const MAX = APLCharSet::MAXIMUM;
+    auto const MIN = APLCharSet::MINIMUM;
+
+    if (s == "+" || s == "-" ||
+        s == "×" || s == "÷" ||
+        s == "∧" || s == "∨" ||
+        s == MIN || s == MAX) return true;
     return false;
 }
 
@@ -925,12 +947,18 @@ auto is_adverb(std::string s) -> bool {
 
 template <typename T>
 auto get_binop(ad_verb const& verb) -> std::function<T(T, T)> {
+
+    auto const MAX = APLCharSet::MAXIMUM;
+    auto const MIN = APLCharSet::MINIMUM;
+
     if      (verb == "+") return std::plus        <T>();
     else if (verb == "-") return std::minus       <T>();
     else if (verb == "÷") return std::divides     <T>();
     else if (verb == "×") return std::multiplies  <T>();
     else if (verb == "∨") return std::logical_or  <T>();
     else if (verb == "∧") return std::logical_and <T>();
+    else if (verb == MAX) return [](auto const& a, auto const& b) { return std::max(a, b); };
+    else if (verb == MIN) return [](auto const& a, auto const& b) { return std::min(a, b); };
 
     return std::plus<T>();
 }
@@ -1138,7 +1166,9 @@ void run_tests() {
               << unit_test("4,4+(×8-4)×⍳|8-4", "4 5 6 7 8") << "\n\r"   // TO idiom
               << unit_test("1≠(2/1),1+⍳2",     "0 0 1 1")   << "\n\r"
               << unit_test("((2/1),1+⍳2)≠1",   "0 0 1 1")   << "\n\r"
-              << unit_test("(∨\\(⍳3)≠1)/⍳3",    "2 3")       << "\n\r";  // LTRIM idiom
+              << unit_test("(∨\\(⍳3)≠1)/⍳3",    "2 3")       << "\n\r"
+              << unit_test("⌈/⍳5",              "5")         << "\n\r"
+              << unit_test("⌊\\2⌽2×⍳5",        "6 6 6 2 2") << "\n\r";  // LTRIM idiom
 
               // ⍴∘⍴¨x ← 'abc' 123 (3 3⍴⍳9)
               // (1,2>/x)⊂x ← (4⌽⍳9),2⌽⍳6
