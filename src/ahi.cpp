@@ -345,6 +345,13 @@ auto getAplCharFromString(std::string s) -> std::string {
 
 // void print_flat_tokens(std::stack<token>); // FOR DEBUGGING
 
+auto get_number(std::string_view s, int i) -> std::pair<int, int> {
+    int num = s[i] - '0';
+    while (i != s.size() - 1 && std::isdigit(s[i+1]))
+        num = num * 10 + (s[++i] - '0');
+    return { num, i };
+}
+
 auto tokenize(std::string_view s) -> std::stack<token> {
     // should trim first, guarantee 1st and last won't be spaces
     std::stack<token> stack;
@@ -353,18 +360,20 @@ auto tokenize(std::string_view s) -> std::stack<token> {
         // print_flat_tokens(stack); // FOR DEBUGGING
         auto c = s[i];
         if (std::isdigit(c)) {
-            if (i == s.size() - 1 || s[i+1] != ' ')
-                stack.push(token{noun{c - '0'}}); // scalar
+            auto [num, j] = get_number(s, i);
+            if (j == s.size() - 1 || s[j+1] != ' ')
+                stack.push(token{noun{num}}); // scalar
             else {
-                // TODO deal with double digit numbers
-                num_literals.push_back(c - '0');
-                while (i != s.size() - 1 && s[i+1] == ' ') {
-                    i += 2;
-                    num_literals.push_back(s[i] - '0');
+                num_literals.push_back(num);
+                while (j != s.size() - 1 && s[j+1] == ' ') {
+                    j += 2;
+                    std::tie(num, j) = get_number(s, j);
+                    num_literals.push_back(num);
                 }
                 stack.push(token{noun{num_literals}}); // vector
                 num_literals.clear();
             }
+            i = j;
         } else if (c != ' ') {
             if (ascii_apl.count(c)) {
                 stack.push(token{ad_verb{c}});
@@ -1168,7 +1177,8 @@ void run_tests() {
               << unit_test("((2/1),1+⍳2)≠1",   "0 0 1 1")   << "\n\r"
               << unit_test("(∨\\(⍳3)≠1)/⍳3",    "2 3")       << "\n\r"
               << unit_test("⌈/⍳5",              "5")         << "\n\r"
-              << unit_test("⌊\\2⌽2×⍳5",        "6 6 6 2 2") << "\n\r";  // LTRIM idiom
+              << unit_test("⌊\\2⌽2×⍳5",        "6 6 6 2 2") << "\n\r"
+              << unit_test("+/2×(0=2|⍳20)/⍳+/10 10", "220") << "\n\r";  // LTRIM idiom
 
               // ⍴∘⍴¨x ← 'abc' 123 (3 3⍴⍳9)
               // (1,2>/x)⊂x ← (4⌽⍳9),2⌽⍳6
