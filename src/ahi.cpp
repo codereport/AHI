@@ -237,7 +237,7 @@ enum ASCII {
 };
 
 std::unordered_set<char> ascii_apl = { '/', '\\', '+', '-', '*', ',',
-                                       '=', '(', ')', '|' };
+                                       '=', '(', ')', '|', '~' };
 
 namespace APLCharSet {
     auto const IOTA                 = "⍳";
@@ -292,6 +292,8 @@ namespace APLCharSet {
     auto const MEMBERSHIP           = ENLIST;
     auto const FIND                 = "⍷";
     auto const LEFT_ARROW           = "←";
+    auto const NOT                  = "~";
+    auto const WITHOUT              = NOT;
 }
 
 // TODO these aren't actually verbs
@@ -537,7 +539,7 @@ auto evaluate_shape(noun const& n) -> expected_noun {
         std::cbegin(n.shape()),
         std::cend(n.shape()),
         std::begin(noun_shapes),
-        [](auto e) { return static_cast<int>(e); });
+        [] (auto e) { return static_cast<int>(e); });
 
     return noun_shapes;
 }
@@ -548,7 +550,8 @@ auto evaluate_absolute_value(noun const& n) -> expected_noun {
         auto i = std::get<scalar>(n.data());
         return std::abs(i);
     } else if (n.type() == noun_type::VECTOR) {
-        auto const& v = std::get<vector>(n.data());
+        // TODO can't use const& ?
+        auto const v = std::get<vector>(n.data());
         std::vector<int> res(v.size());
         std::transform(
             std::cbegin(v),
@@ -558,6 +561,37 @@ auto evaluate_absolute_value(noun const& n) -> expected_noun {
         return res;
     } else {
         return error{"absolute value not support for rank > 1 yet"};
+    }
+}
+
+auto evaluate_not(noun const& n) -> expected_noun {
+    if (n.type() == noun_type::SCALAR) {
+        auto i = std::get<scalar>(n.data());
+        if (i != 0 && i != 1)
+            return error{"domain error on not, must be 0 or 1"};
+        return 1 - i;
+    } else if (n.type() == noun_type::VECTOR) {
+        // TODO can't use const& ?
+        auto const v = std::get<vector>(n.data());
+        std::vector<int> res(v.size());
+
+        auto const domain_error = std::any_of(
+            std::cbegin(v),
+            std::cend(v),
+            [] (auto const& e) { return e != 0 && e != 1; });
+
+        if (domain_error)
+            return error{"domain error on not, must be 0 or 1"};
+
+        std::transform(
+            std::cbegin(v),
+            std::cend(v),
+            std::begin(res),
+            [] (auto const& e) { return 1 - e; });
+
+        return res;
+    } else {
+        return error{"not (~) not support for rank > 1 yet"};
     }
 }
 
@@ -573,7 +607,8 @@ auto evaluate_sign_of(noun const& n) -> expected_noun {
         auto i = std::get<scalar>(n.data());
         return sign_of(i);
     } else if (n.type() == noun_type::VECTOR) {
-        auto const& v = std::get<vector>(n.data());
+        // TODO can't use const& ?
+        auto const v = std::get<vector>(n.data());
         std::vector<int> res(v.size());
         std::transform(
             std::cbegin(v),
@@ -596,6 +631,7 @@ auto evalulate_monadic(ad_verb const& verb,
     else if (verb == SHAPE)             return evaluate_shape          (n);
     else if (verb == ABSOLUTE_VALUE)    return evaluate_absolute_value (n);
     else if (verb == SIGN_OF)           return evaluate_sign_of        (n);
+    else if (verb == NOT)               return evaluate_not            (n);
     else                      return error{"monadic " + verb + " not supported yet"};
 }
 
@@ -1227,8 +1263,10 @@ void run_tests() {
               << unit_test("⌊\\2⌽2×⍳5",        "6 6 6 2 2") << "\n\r"
               << unit_test("+/2×(0=2|⍳20)/⍳+/10 10", "220") << "\n\r"
               << unit_test("m←5",              "5")        << "\n\r"
-              << unit_test("+/(2|x)/x←⍳10",     "25")       << "\n\r";
-            //   << unit_test("+/(~2|x)/x←⍳10",    "30")       << "\n\r";
+              << unit_test("+/(2|x)/x←⍳10",     "25")       << "\n\r"
+              << unit_test("+/(~2|x)/x←⍳10",    "30")       << "\n\r"
+              << unit_test("|(⍳4)-2",           "1 0 1 2")  << "\n\r"
+              << unit_test("×(⍳4)-2",           "-1 0 1 1") << "\n\r";
 
               // ⍴∘⍴¨x ← 'abc' 123 (3 3⍴⍳9)
               // (1,2>/x)⊂x ← (4⌽⍳9),2⌽⍳6
