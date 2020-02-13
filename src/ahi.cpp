@@ -3,6 +3,7 @@
 #include <variant>
 #include <stack>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 #include <cassert>
 #include <algorithm> // generate?, transform, unique, reverse, rotate
@@ -38,7 +39,16 @@ using ad_verb = std::string; // also parents now
 using paren   = std::string; // TODO
 // using adverb  = std::string;
 
-using token = std::variant<noun, ad_verb>; //, adverb>;
+struct variable {
+    std::string name;
+};
+
+struct copula {}; // no need to store ←
+
+using token = std::variant<noun,
+                           ad_verb,  // split this out to
+                           variable, // adverb>
+                           copula>;
 
 using error = tl::unexpected<std::string>;
 
@@ -123,6 +133,8 @@ public:
     [[ nodiscard ]] auto data() -> noun_data& { return _data; };
     [[ nodiscard ]] auto data() const noexcept { return _data; };
 };
+
+std::unordered_map<std::string, noun> variable_list;
 
 auto to_string(noun_type const& n) -> std::string {
     switch (n) {
@@ -279,6 +291,7 @@ namespace APLCharSet {
     auto const ENLIST               = "∊";
     auto const MEMBERSHIP           = ENLIST;
     auto const FIND                 = "⍷";
+    auto const LEFT_ARROW           = "←";
 }
 
 // TODO these aren't actually verbs
@@ -314,6 +327,7 @@ auto getAplCharFromShortCut(char c) -> std::string {
         case 'e': return ENLIST;
         case 'E': return FIND;
         case 'd': return FLOOR;
+        case '[': return LEFT_ARROW;
         default:  return "unkown character"s + c;
     }
 }
@@ -374,13 +388,22 @@ auto tokenize(std::string_view s) -> std::stack<token> {
                 num_literals.clear();
             }
             i = j;
+        } else if (std::isalpha(c)) {
+            auto var = std::string{c};
+            while (i + 1 < s.size() && std::isalpha(s[i+1]))
+                var += s[i++];
+            stack.push(token{variable{var}});
         } else if (c != ' ') {
             if (ascii_apl.count(c)) {
                 stack.push(token{ad_verb{c}});
             } else {
                 // deal with APL char 3 char width
-                auto delta = s.substr(i, 2) == "×" ? 2 : 3;
-                stack.push(token{ad_verb{s.substr(i, delta)}});
+                auto const delta = s.substr(i, 2) == "×" ? 2 : 3;
+                if (s.substr(i, delta) == APLCharSet::LEFT_ARROW) {
+                    stack.push(token{copula{}});
+                } else {
+                    stack.push(token{ad_verb{s.substr(i, delta)}});
+                }
                 i += delta - 1;
             }
         } else {
@@ -427,11 +450,15 @@ void print_flat_tokens(std::stack<token> tokens) {
         tokens.pop();
     }
 
-    // std::cout << "?";
     std::cout << "    ";
     for (auto const& token : v) {
-        if (std::holds_alternative<ad_verb>(token))
+        if (std::holds_alternative<ad_verb>(token)) {
             std::cout << std::get<ad_verb>(token);
+        } else if (std::holds_alternative<copula>(token)) {
+            std::cout << APLCharSet::LEFT_ARROW;
+        } else if (std::holds_alternative<variable>(token)) {
+            std::cout << std::get<variable>(token).name;
+        }
         else {
             auto const& n = std::get<noun>(token);
             if (n.type() == noun_type::SCALAR) {
@@ -1030,6 +1057,12 @@ void resolve_parens(std::stack<token>& tokens) {
     tokens.push(new_expr);
 }
 
+auto get_noun(token const& t) -> noun {
+    return std::holds_alternative<noun>(t)
+        ? std::get<noun>(t)
+        : variable_list.find(std::get<variable>(t).name)->second;
+}
+
 auto eval(std::stack<token> tokens, bool first_level) -> noun {
 
     while (not tokens.empty()) {
@@ -1047,68 +1080,82 @@ auto eval(std::stack<token> tokens, bool first_level) -> noun {
         } else {
             if (first_level)
                 std::cout << "    ";
-            return std::get<noun>(tokens.top());
+            return get_noun(tokens.top());
         }
         // remove braces
 
         {
-            auto rhs = std::get<noun>(tokens.top());
+
+            auto rhs = get_noun(tokens.top());
             tokens.pop();
             if (tokens.empty()) {
                 std::cout << rhs; // maybe create print_noun
                 break;
             }
-            auto verb = std::get<ad_verb>(tokens.top());
-            tokens.pop();
 
-            // lhs parens?
-            // TODO remove temporary hack
-            bool evaluated_adverb = false;
-            if (not tokens.empty() and std::holds_alternative<paren>(tokens.top())) {
-                // TODO the `paren` above really just means string ATM
-                // need to design this properly
-                auto lhs = std::get<paren>(tokens.top());
-                if (lhs == ")"s)
-                    resolve_parens(tokens);
-                else if (is_adverb(verb) &&
-                         is_composable_with_binary_op_adverb(lhs)) {
-                    auto exp_new_subj = [&] {
-                        if (verb == "/") return evaluate_reduce(lhs, rhs);
-                        else {
-                            assert(verb == "\\");
-                            return evaluate_scan(lhs, rhs);
+            if (std::holds_alternative<copula>(tokens.top())) {
+                // process ←
+                tokens.pop();
+                assert(not tokens.empty());
+                assert(std::holds_alternative<variable>(tokens.top()));
+                auto const var = std::get<variable>(tokens.top());
+                tokens.pop();
+                variable_list.insert({var.name, rhs});
+                tokens.push(rhs);
+            } else {
+                auto verb = std::get<ad_verb>(tokens.top());
+                tokens.pop();
+
+                // lhs parens?
+                // TODO remove temporary hack
+                bool evaluated_adverb = false;
+                if (not tokens.empty() and std::holds_alternative<paren>(tokens.top())) {
+                    // TODO the `paren` above really just means string ATM
+                    // need to design this properly
+                    auto lhs = std::get<paren>(tokens.top());
+                    if (lhs == ")"s)
+                        resolve_parens(tokens);
+                    else if (is_adverb(verb) &&
+                            is_composable_with_binary_op_adverb(lhs)) {
+                        auto exp_new_subj = [&] {
+                            if (verb == "/") return evaluate_reduce(lhs, rhs);
+                            else {
+                                assert(verb == "\\");
+                                return evaluate_scan(lhs, rhs);
+                            }
+                        } ();
+                        if (not exp_new_subj.has_value()) {
+                            std::cout << COLOR_ERROR <<exp_new_subj.error();
+                            return noun{0};
                         }
-                    } ();
+                        tokens.pop();
+                        tokens.push(exp_new_subj.value());
+                        evaluated_adverb = true;
+                    }
+                }
+
+                if (evaluated_adverb) {}
+                else if (tokens.empty() or
+                    (not std::holds_alternative<noun>(tokens.top())
+                 and not std::holds_alternative<variable>(tokens.top()))) {
+                    // process MONADIC
+                    auto exp_new_subj = evalulate_monadic(verb, rhs);
                     if (not exp_new_subj.has_value()) {
                         std::cout << COLOR_ERROR <<exp_new_subj.error();
                         return noun{0};
                     }
-                    tokens.pop();
                     tokens.push(exp_new_subj.value());
-                    evaluated_adverb = true;
+                } else {
+                    // process DYADIC
+                    auto lhs = get_noun(tokens.top());
+                    tokens.pop();
+                    auto exp_new_subj = evaluate_dyadic(lhs, verb, rhs);
+                    if (not exp_new_subj.has_value()) {
+                        std::cout << COLOR_ERROR << exp_new_subj.error();
+                        return noun{0};
+                    }
+                    tokens.push(exp_new_subj.value());
                 }
-            }
-
-            if (evaluated_adverb) {}
-            else if (tokens.empty() or
-                not std::holds_alternative<noun>(tokens.top())) {
-                // process MONADIC
-                auto exp_new_subj = evalulate_monadic(verb, rhs);
-                if (not exp_new_subj.has_value()) {
-                    std::cout << COLOR_ERROR <<exp_new_subj.error();
-                    return noun{0};
-                }
-                tokens.push(exp_new_subj.value());
-            } else {
-                // process DYADIC
-                auto lhs = std::get<noun>(tokens.top());
-                tokens.pop();
-                auto exp_new_subj = evaluate_dyadic(lhs, verb, rhs);
-                if (not exp_new_subj.has_value()) {
-                    std::cout << COLOR_ERROR << exp_new_subj.error();
-                    return noun{0};
-                }
-                tokens.push(exp_new_subj.value());
             }
         }
     }
@@ -1178,7 +1225,8 @@ void run_tests() {
               << unit_test("(∨\\(⍳3)≠1)/⍳3",    "2 3")       << "\n\r"
               << unit_test("⌈/⍳5",              "5")         << "\n\r"
               << unit_test("⌊\\2⌽2×⍳5",        "6 6 6 2 2") << "\n\r"
-              << unit_test("+/2×(0=2|⍳20)/⍳+/10 10", "220") << "\n\r";  // LTRIM idiom
+              << unit_test("+/2×(0=2|⍳20)/⍳+/10 10", "220") << "\n\r"
+              << unit_test("m←5",              "5")        << "\n\r";  // LTRIM idiom
 
               // ⍴∘⍴¨x ← 'abc' 123 (3 3⍴⍳9)
               // (1,2>/x)⊂x ← (4⌽⍳9),2⌽⍳6
