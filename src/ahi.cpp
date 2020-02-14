@@ -226,7 +226,7 @@ auto to_string(noun const& n) -> std::string {
 
 std::ostream& operator<<(std::ostream& os, noun const& n) {
     // os.flush();
-    os << COLOR_OUTPUT << to_string(n.data()) << '\n';
+    os << COLOR_OUTPUT << to_string(n.data());
     return os;
 }
 
@@ -476,13 +476,7 @@ void print_flat_tokens(std::stack<token> tokens) {
             }
         }
     }
-    // TODO fix this awful bug
-    if (std::holds_alternative<noun>(v.back())) {
-        auto n = std::get<noun>(v.back());
-        if (n.type() == noun_type::SCALAR)
-            std::cout << "\n";
-    }
-    std::cout << "\r";
+    std::cout << "\n\r";
 }
 
 // monadic
@@ -1439,7 +1433,7 @@ int main() {
             } else {
                 auto tokens = tokenize(input);
                 auto nn = eval(tokens, true);
-                std::cout << nn;
+                std::cout << nn << "\n\r";;
             }
             std::cout << COLOR_HIGHLIGHT << "\r> " << COLOR_INPUT;
             input.clear();
