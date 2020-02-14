@@ -160,11 +160,13 @@ auto to_string(std::vector<T> const& v) -> std::string {
         std::next(std::cbegin(v)),
         std::cend(v),
         std::string{to_string(v.front())},
-        [](auto const& acc, auto e) {
+        [first = true] (auto const& acc, auto e) mutable {
             if constexpr (std::is_integral_v<T>) {
                 return acc + " " + to_string(e);
             } else {
-                return acc + "\n\r" + to_string(e);
+                first = false;
+                auto const spaces = first ? ""s : "    "s;
+                return acc + "\n\r" + spaces + to_string(e);
             }
         });
     return res;
