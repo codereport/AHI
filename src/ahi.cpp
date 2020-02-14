@@ -975,8 +975,54 @@ auto evaluate_partition(noun const& lhs,
     }
 }
 
-// template <typename T>
+auto evaluate_reshape(noun const& lhs,
+                      noun const& rhs) -> expected_noun {
+    if (lhs.type() == noun_type::SCALAR) {
+        auto const l = std::get<scalar>(lhs.data());
+        if (rhs.type() == noun_type::SCALAR) {
+            auto const r = std::get<scalar>(rhs.data());
+            return std::vector(l, r);
+        } else if (rhs.type() == noun_type::VECTOR) {
+            auto const r = std::get<vector>(rhs.data());
+            if (l<= r.size()) {
+                return vector(r.begin(), r.begin() + l);
+            } else {
+                auto res = r;
+                while (res.size() < l) {
+                    auto end = std::min(res.size(), l - res.size());
+                    res.insert(res.end(), r.begin(), r.begin() + end);
+                }
+                return res;
+            }
+        } else { // MATRIX
+            // TODO
+        }
+    } else if (lhs.type() == noun_type::VECTOR) {
+        // std::cout << to_string(lhs) << '\n';
+        // std::cout << to_string(lhs.shape()) << '\n';
+        assert(lhs.shape().size() == 1 && lhs.shape().front() == 2);
+        auto const l    = std::get<vector>(lhs.data());
+        auto const rows = l.front();
+        auto const cols = l.back();
+        if (rhs.type() == noun_type::SCALAR) {
+            auto const r = std::get<scalar>(rhs.data());
+            return std::vector(rows, std::vector(cols, r));
+        } else if (rhs.type() == noun_type::VECTOR) {
+            auto const r = std::get<vector>(rhs.data());
+            std::vector res(rows, std::vector(cols, 0));
+            for (int i = 0; i < rows; ++i) {
+                for (int j = 0; j < cols; ++j)
+                    res[i][j] = r[(i * cols + j) % r.size()];
+            }
+            return res;
+        } else { // MATRIX
+            // TODO
+        }
+    }
+    return error{"ranks not supported for reshape"};
+}
 
+// template <typename T>
 auto evaluate_dyadic(noun    const& lhs,
                      ad_verb const& verb,
                      noun    const& rhs) -> expected_noun {
@@ -997,6 +1043,7 @@ auto evaluate_dyadic(noun    const& lhs,
     else if (verb == MULTIPLY)            return evaluate_multiply            (lhs, rhs);
     else if (verb == MAXIMUM)             return evaluate_maximum             (lhs, rhs);
     else if (verb == MINIMUM)             return evaluate_minimum             (lhs, rhs);
+    else if (verb == RESHAPE)             return evaluate_reshape             (lhs, rhs);
     else                           return error{"dyadic " + verb + " not supported yet"};
 }
 
@@ -1266,10 +1313,12 @@ void run_tests() {
               << unit_test("+/(2|x)/x←⍳10",     "25")       << "\n\r"
               << unit_test("+/(~2|x)/x←⍳10",    "30")       << "\n\r"
               << unit_test("|(⍳4)-2",           "1 0 1 2")  << "\n\r"
-              << unit_test("×(⍳4)-2",           "-1 0 1 1") << "\n\r";
+              << unit_test("×(⍳4)-2",           "-1 0 1 1") << "\n\r"
+              << unit_test("-/⍳9",              "5")        << "\n\r"
+              << unit_test("-\\⍳5",             "1 ¯1 2 ¯2 3") << "\n\r";
 
               // ⍴∘⍴¨x ← 'abc' 123 (3 3⍴⍳9)
-              // (1,2>/x)⊂x ← (4⌽⍳9),2⌽⍳6
+              // (1,2>/x)⊂x ← (4⌽⍳9),2⌽⍳6  // N-Wise Reduction
 }
 
 std::string padRight(std::string const& input, char add, int num) {
