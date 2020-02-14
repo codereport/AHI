@@ -470,8 +470,9 @@ void print_flat_tokens(std::stack<token> tokens) {
             } else if (n.type() == noun_type::VECTOR) {
                 std::cout << n;
             } else {
-                assert(n.type() == noun_type::NESTED_VECTOR);
-                std::cout << "...\n\r    " << n;
+                assert(n.type() == noun_type::NESTED_VECTOR ||
+                       n.type() == noun_type::MATRIX);
+                std::cout << "...\n\r    " << n << "\n\r";
             }
         }
     }
@@ -1096,6 +1097,20 @@ auto evaluate_reduce(ad_verb const& lhs,
             *std::cbegin(v),
             get_binop<int/*decltype(*std::begin(v))*/>(lhs));
 
+    } else if (rhs.type() == noun_type::MATRIX) {
+        auto const m = std::get<matrix>(rhs.data());
+        std::vector<int> res(rhs.shape().front()); // num of rows = len of returned vector
+
+        std::transform(
+            std::cbegin(m),
+            std::cend(m),
+            std::begin(res),
+            [lhs] (auto const& row) { return std::get<scalar>(
+                                        evaluate_reduce(lhs, noun{row})
+                                                .value()
+                                                .data()); });
+
+        return res;
     } else return error{"rank " + std::to_string(rhs.rank())
                       + " not supported for reduce adverb"};
 }
