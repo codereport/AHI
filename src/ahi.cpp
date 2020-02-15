@@ -49,11 +49,14 @@ struct verb        { std::string glyph; };
 struct punctuation { ParenType type;    };
 struct copula      {}; // no need to store ←
 
-using token = std::variant<noun,
-                           ad_verb,  // split this out to
-                           punctuation,
-                           variable,
-                           copula>;
+using token = 
+    std::variant<
+        noun,
+        verb,
+        adverb,
+        copula,
+        variable,
+        punctuation>;
 
 using error = tl::unexpected<std::string>;
 
@@ -288,6 +291,14 @@ enum ASCII {
 std::unordered_set<char> ascii_apl = { '/', '\\', '+', '-', '*', ',',
                                        '=', '(', ')', '|', '~' };
 
+auto is_adverb(std::string s) -> bool {
+    return s == "/" || s == "\\";
+}
+
+auto is_adverb(char c) -> bool {
+    return c == '/' || c == '\\';
+}
+
 namespace APLCharSet {
     auto const IOTA                 = "⍳";
     auto const INDEX_OF             = IOTA; // dyadic
@@ -346,14 +357,6 @@ namespace APLCharSet {
     auto const EXPONENTIAL          = "*";
     auto const POWER                = EXPONENTIAL;
 }
-
-// TODO these aren't actually verbs
-// std::unordered_set<std::string> verbs = {
-//     APLCharSet::DROP,
-//     APLCharSet::IOTA,
-//     APLCharSet::REDUCE,
-//     APLCharSet::SCAN,
-//     APLCharSet::TAKE };
 
 auto getAplCharFromShortCut(char c) -> std::string {
     using namespace APLCharSet;
@@ -452,15 +455,18 @@ auto tokenize(std::string_view s) -> std::stack<token> {
                 stack.push(token{punctuation{ParenType::LEFT}});
             } else if (c == ')') {
                 stack.push(token{punctuation{ParenType::RIGHT}});
+            } else if (is_adverb(c) &&
+                std::holds_alternative<verb>(stack.top())) {
+                stack.push(token{adverb{std::string{c}}});
             } else if (ascii_apl.count(c)) {
-                stack.push(token{ad_verb{c}});
+                stack.push(token{verb{std::string{c}}});
             } else {
                 // deal with APL char 3 char width
                 auto const delta = s.substr(i, 2) == "×" ? 2 : 3;
                 if (s.substr(i, delta) == APLCharSet::LEFT_ARROW) {
                     stack.push(token{copula{}});
                 } else {
-                    stack.push(token{ad_verb{s.substr(i, delta)}});
+                    stack.push(token{verb{std::string{s.substr(i, delta)}}});
                 }
                 i += delta - 1;
             }
@@ -474,21 +480,6 @@ auto tokenize(std::string_view s) -> std::stack<token> {
     //     && "Top element of token stack should always be a noun");
 
     return stack;
-}
-
-void print_tokens(std::stack<token> tokens) {
-    std::cout << "num tokens: " << tokens.size() << "\n\r";
-    while (not tokens.empty()) {
-        if (std::holds_alternative<ad_verb>(tokens.top()))
-            std::cout << std::get<ad_verb>(tokens.top());
-        else {
-            auto n = std::get<noun>(tokens.top());
-            // print_subject(subj);
-            std::cout << n;
-        }
-        std::cout << "\n\r";
-        tokens.pop();
-    }
 }
 
 void print_flat_tokens(std::stack<token> tokens) {
@@ -510,8 +501,13 @@ void print_flat_tokens(std::stack<token> tokens) {
 
     std::cout << "    ";
     for (auto const& token : v) {
-        if (std::holds_alternative<ad_verb>(token)) {
-            std::cout << std::get<ad_verb>(token);
+        if (std::holds_alternative<verb>(token)) {
+            std::cout << std::get<verb>(token).glyph;
+        } else if (std::holds_alternative<adverb>(token)) {
+            std::cout << std::get<adverb>(token).glyph;
+        } else if (std::holds_alternative<punctuation>(token)) {
+            std::cout << (std::get<punctuation>(token).type
+                == ParenType::LEFT ? '(' : ')');
         } else if (std::holds_alternative<copula>(token)) {
             std::cout << APLCharSet::LEFT_ARROW;
         } else if (std::holds_alternative<variable>(token)) {
@@ -672,18 +668,18 @@ auto evaluate_sign_of(noun const& n) -> expected_noun {
     }
 }
 
-auto evalulate_monadic(ad_verb const& verb,
+auto evalulate_monadic(verb const& mverb,
                        noun const& n) -> expected_noun {
     using namespace APLCharSet;
-    if      (verb == IOTA)              return evaluate_iota           (n);
-    else if (verb == REVERSE)           return evaluate_reverse        (n);
-    else if (verb == UNIQUE)            return evaluate_unique         (n);
-    else if (verb == ENCLOSE)           return evaluate_enclose        (n);
-    else if (verb == SHAPE)             return evaluate_shape          (n);
-    else if (verb == ABSOLUTE_VALUE)    return evaluate_absolute_value (n);
-    else if (verb == SIGN_OF)           return evaluate_sign_of        (n);
-    else if (verb == NOT)               return evaluate_not            (n);
-    else                      return error{"monadic " + verb + " not supported yet"};
+    if      (mverb.glyph == IOTA)              return evaluate_iota           (n);
+    else if (mverb.glyph == REVERSE)           return evaluate_reverse        (n);
+    else if (mverb.glyph == UNIQUE)            return evaluate_unique         (n);
+    else if (mverb.glyph == ENCLOSE)           return evaluate_enclose        (n);
+    else if (mverb.glyph == SHAPE)             return evaluate_shape          (n);
+    else if (mverb.glyph == ABSOLUTE_VALUE)    return evaluate_absolute_value (n);
+    else if (mverb.glyph == SIGN_OF)           return evaluate_sign_of        (n);
+    else if (mverb.glyph == NOT)               return evaluate_not            (n);
+    else return error{"monadic " + mverb.glyph + " not supported yet"};
 }
 
 // -> x | take m
@@ -1080,29 +1076,29 @@ auto evaluate_reshape(noun const& lhs,
 }
 
 // template <typename T>
-auto evaluate_dyadic(noun    const& lhs,
-                     ad_verb const& verb,
-                     noun    const& rhs) -> expected_noun {
+auto evaluate_dyadic(noun const& lhs,
+                     verb const& dverb,
+                     noun const& rhs) -> expected_noun {
     using namespace APLCharSet;
-    if      (verb == CATENATE)            return evaluate_catenate            (lhs, rhs);
-    else if (verb == TAKE)                return evaluate_take                (lhs, rhs);
-    else if (verb == DROP)                return evaluate_drop                (lhs, rhs);
-    else if (verb == EQUAL_TO)            return evaluate_equal_to            (lhs, rhs);
-    else if (verb == NOT_EQUAL_TO)        return evaluate_not_equal_to        (lhs, rhs);
-    else if (verb == ROTATE)              return evaluate_rotate              (lhs, rhs);
-    else if (verb == MATCH)               return evaluate_match               (lhs, rhs);
-    else if (verb == REPLICATE)           return evaluate_replicate           (lhs, rhs);
-    else if (verb == RESIDUE)             return evaluate_residue             (lhs, rhs);
-    else if (verb == PARTITIONED_ENCLOSE) return evaluate_partitioned_enclose (lhs, rhs);
-    else if (verb == PARTITION)           return evaluate_partition           (lhs, rhs);
-    else if (verb == SUBTRACT)            return evaluate_subtract            (lhs, rhs);
-    else if (verb == ADD)                 return evaluate_add                 (lhs, rhs);
-    else if (verb == MULTIPLY)            return evaluate_multiply            (lhs, rhs);
-    else if (verb == MAXIMUM)             return evaluate_maximum             (lhs, rhs);
-    else if (verb == MINIMUM)             return evaluate_minimum             (lhs, rhs);
-    else if (verb == RESHAPE)             return evaluate_reshape             (lhs, rhs);
-    else if (verb == POWER)               return evaluate_power               (lhs, rhs);
-    else                           return error{"dyadic " + verb + " not supported yet"};
+    if      (dverb.glyph == CATENATE)            return evaluate_catenate            (lhs, rhs);
+    else if (dverb.glyph == TAKE)                return evaluate_take                (lhs, rhs);
+    else if (dverb.glyph == DROP)                return evaluate_drop                (lhs, rhs);
+    else if (dverb.glyph == EQUAL_TO)            return evaluate_equal_to            (lhs, rhs);
+    else if (dverb.glyph == NOT_EQUAL_TO)        return evaluate_not_equal_to        (lhs, rhs);
+    else if (dverb.glyph == ROTATE)              return evaluate_rotate              (lhs, rhs);
+    else if (dverb.glyph == MATCH)               return evaluate_match               (lhs, rhs);
+    else if (dverb.glyph == REPLICATE)           return evaluate_replicate           (lhs, rhs);
+    else if (dverb.glyph == RESIDUE)             return evaluate_residue             (lhs, rhs);
+    else if (dverb.glyph == PARTITIONED_ENCLOSE) return evaluate_partitioned_enclose (lhs, rhs);
+    else if (dverb.glyph == PARTITION)           return evaluate_partition           (lhs, rhs);
+    else if (dverb.glyph == SUBTRACT)            return evaluate_subtract            (lhs, rhs);
+    else if (dverb.glyph == ADD)                 return evaluate_add                 (lhs, rhs);
+    else if (dverb.glyph == MULTIPLY)            return evaluate_multiply            (lhs, rhs);
+    else if (dverb.glyph == MAXIMUM)             return evaluate_maximum             (lhs, rhs);
+    else if (dverb.glyph == MINIMUM)             return evaluate_minimum             (lhs, rhs);
+    else if (dverb.glyph == RESHAPE)             return evaluate_reshape             (lhs, rhs);
+    else if (dverb.glyph == POWER)               return evaluate_power               (lhs, rhs);
+    else return error{"dyadic " + dverb.glyph + " not supported yet"};
 }
 
 auto is_composable_with_binary_op_adverb(std::string_view s) -> bool {
@@ -1118,32 +1114,27 @@ auto is_composable_with_binary_op_adverb(std::string_view s) -> bool {
            s == POW;
 }
 
-auto is_adverb(std::string s) -> bool {
-    if (s == "/" || s == "\\") return true;
-    return false;
-}
-
 template <typename T>
-auto get_binop(ad_verb const& verb) -> std::function<T(T, T)> {
+auto get_binop(verb const& cverb) -> std::function<T(T, T)> {
 
     auto const MAX = APLCharSet::MAXIMUM;
     auto const MIN = APLCharSet::MINIMUM;
 
-    if      (verb == "+") return std::plus        <T>();
-    else if (verb == "-") return std::minus       <T>();
-    else if (verb == "÷") return std::divides     <T>();
-    else if (verb == "×") return std::multiplies  <T>();
-    else if (verb == "∨") return std::logical_or  <T>();
-    else if (verb == "∧") return std::logical_and <T>();
-    else if (verb == MAX) return [](auto const& a, auto const& b) { return std::max(a, b); };
-    else if (verb == MIN) return [](auto const& a, auto const& b) { return std::min(a, b); };
+    if      (cverb.glyph == "+") return std::plus        <T>();
+    else if (cverb.glyph == "-") return std::minus       <T>();
+    else if (cverb.glyph == "÷") return std::divides     <T>();
+    else if (cverb.glyph == "×") return std::multiplies  <T>();
+    else if (cverb.glyph == "∨") return std::logical_or  <T>();
+    else if (cverb.glyph == "∧") return std::logical_and <T>();
+    else if (cverb.glyph == MAX) return [](auto const& a, auto const& b) { return std::max(a, b); };
+    else if (cverb.glyph == MIN) return [](auto const& a, auto const& b) { return std::min(a, b); };
 
     return std::plus<T>();
 }
 
-auto evaluate_reduce(ad_verb const& lhs,
-                     noun    const& rhs) -> expected_noun {
-    assert(is_composable_with_binary_op_adverb(lhs));
+auto evaluate_reduce(verb const& lhs,
+                     noun const& rhs) -> expected_noun {
+    assert(is_composable_with_binary_op_adverb(lhs.glyph));
     if (rhs.type() == noun_type::VECTOR) {
         auto const v = std::get<vector>(rhs.data());
 
@@ -1171,9 +1162,9 @@ auto evaluate_reduce(ad_verb const& lhs,
                       + " not supported for reduce adverb"};
 }
 
-auto evaluate_scan(ad_verb const& lhs,
-                   noun    const& rhs) -> expected_noun {
-    assert(is_composable_with_binary_op_adverb(lhs));
+auto evaluate_scan(verb const& lhs,
+                   noun const& rhs) -> expected_noun {
+    assert(is_composable_with_binary_op_adverb(lhs.glyph));
     if (rhs.type() == noun_type::VECTOR) {
         auto const v = std::get<vector>(rhs.data());
         auto res = v;
@@ -1238,87 +1229,88 @@ auto eval(std::stack<token> tokens, bool first_level) -> noun {
                 std::cout << "    ";
             return get_noun(tokens.top());
         }
-        // remove braces
 
-        {
+        auto rhs = get_noun(tokens.top());
+        tokens.pop();
+        if (tokens.empty()) {
+            std::cout << rhs; // maybe create print_noun
+            break;
+        }
 
-            auto rhs = get_noun(tokens.top());
+        // left of a noun should always be on of:
+        // copula, verb OR adverb
+        assert(std::holds_alternative<verb>  (tokens.top()) ||
+               std::holds_alternative<adverb>(tokens.top()) ||
+               std::holds_alternative<copula>(tokens.top()));
+
+        if (std::holds_alternative<copula>(tokens.top())) {
+            // process ←
             tokens.pop();
-            if (tokens.empty()) {
-                std::cout << rhs; // maybe create print_noun
-                break;
+            assert(not tokens.empty());
+            assert(std::holds_alternative<variable>(tokens.top()));
+            auto const var = std::get<variable>(tokens.top());
+            tokens.pop();
+            variable_list.insert({var.name, rhs});
+            tokens.push(rhs);
+        } else if (std::holds_alternative<adverb>(tokens.top())) {
+            auto adv = std::get<adverb>(tokens.top());
+            tokens.pop();
+            auto const& lhs = std::get<verb>(tokens.top());
+            assert(is_composable_with_binary_op_adverb(lhs.glyph));
+
+            auto exp_new_subj = [&] {
+                if (adv.glyph == "/") {
+                    return evaluate_reduce(lhs, rhs);
+                } else {
+                    assert(adv.glyph == "\\");
+                    return evaluate_scan(lhs, rhs);
+                }
+            } ();
+
+            if (not exp_new_subj.has_value()) {
+                std::cout << COLOR_ERROR <<exp_new_subj.error();
+                return noun{0};
             }
 
-            if (std::holds_alternative<copula>(tokens.top())) {
-                // process ←
-                tokens.pop();
-                assert(not tokens.empty());
-                assert(std::holds_alternative<variable>(tokens.top()));
-                auto const var = std::get<variable>(tokens.top());
-                tokens.pop();
-                variable_list.insert({var.name, rhs});
-                tokens.push(rhs);
+            tokens.pop();
+            tokens.push(exp_new_subj.value());
+        } else {
+            assert(std::holds_alternative<verb>(tokens.top()));
+            auto const v = std::get<verb>(tokens.top());
+            tokens.pop();
+
+            if (tokens.empty() || std::holds_alternative<verb>  (tokens.top())
+                               || std::holds_alternative<adverb>(tokens.top())
+                               || std::holds_alternative<copula>(tokens.top())) {
+                auto const& mverb = v;
+                auto exp_new_subj = evalulate_monadic(mverb, rhs);
+                if (not exp_new_subj.has_value()) {
+                    std::cout << COLOR_ERROR <<exp_new_subj.error();
+                    return noun{0};
+                }
+                tokens.push(exp_new_subj.value());
             } else {
-                auto verb = std::get<ad_verb>(tokens.top());
+
+                auto const& dverb = v;
+
+                if (std::holds_alternative<punctuation>(tokens.top())) {
+                    // duplicated code from above
+                    auto const& paren = std::get<punctuation>(tokens.top());
+                    assert(paren.type == ParenType::RIGHT);
+                    resolve_parens(tokens);
+                }
+
+                assert(std::holds_alternative<noun>    (tokens.top()) ||
+                       std::holds_alternative<variable>(tokens.top()));
+
+                auto const& lhs = get_noun(tokens.top());
+                auto exp_new_subj = evaluate_dyadic(lhs, dverb, rhs);
+                if (not exp_new_subj.has_value()) {
+                    std::cout << COLOR_ERROR << exp_new_subj.error();
+                    return noun{0};
+                }
                 tokens.pop();
-
-                // lhs parens?
-                // TODO remove temporary hack
-                bool evaluated_adverb = false;
-                if (not tokens.empty()) {
-                    if (std::holds_alternative<punctuation>(tokens.top())) {
-                        // duplicated code from above
-                        auto const& paren = std::get<punctuation>(tokens.top());
-                        assert(paren.type == ParenType::RIGHT);
-                        resolve_parens(tokens);
-                    } else if (is_adverb(verb) &&
-                        std::holds_alternative<ad_verb>(tokens.top())) {
-
-                        auto const& lhs = std::get<ad_verb>(tokens.top());
-                        assert(is_composable_with_binary_op_adverb(lhs));
-
-                        auto exp_new_subj = [&] {
-                            if (verb == "/") {
-                                return evaluate_reduce(lhs, rhs);
-                            } else {
-                                assert(verb == "\\");
-                                return evaluate_scan(lhs, rhs);
-                            }
-                        } ();
-
-                        if (not exp_new_subj.has_value()) {
-                            std::cout << COLOR_ERROR <<exp_new_subj.error();
-                            return noun{0};
-                        }
-
-                        tokens.pop();
-                        tokens.push(exp_new_subj.value());
-                        evaluated_adverb = true;
-                    }
-                }
-
-                if (evaluated_adverb) {}
-                else if (tokens.empty() or
-                    (not std::holds_alternative<noun>(tokens.top())
-                 and not std::holds_alternative<variable>(tokens.top()))) {
-                    // process MONADIC
-                    auto exp_new_subj = evalulate_monadic(verb, rhs);
-                    if (not exp_new_subj.has_value()) {
-                        std::cout << COLOR_ERROR <<exp_new_subj.error();
-                        return noun{0};
-                    }
-                    tokens.push(exp_new_subj.value());
-                } else {
-                    // process DYADIC
-                    auto lhs = get_noun(tokens.top());
-                    tokens.pop();
-                    auto exp_new_subj = evaluate_dyadic(lhs, verb, rhs);
-                    if (not exp_new_subj.has_value()) {
-                        std::cout << COLOR_ERROR << exp_new_subj.error();
-                        return noun{0};
-                    }
-                    tokens.push(exp_new_subj.value());
-                }
+                tokens.push(exp_new_subj.value());
             }
         }
     }
