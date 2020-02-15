@@ -152,24 +152,64 @@ auto to_string(T t) -> std::string {
     return std::to_string(t);
 }
 
+auto left_pad(int len, std::string const& str) {
+    return std::string(len - str.size(), ' ') + str;
+}
+
+template <typename T>
+auto to_string_with_pads(std::vector<T>   const& values,
+                         std::vector<int> const& widths) -> std::string {
+    return std::inner_product(
+        std::cbegin(values),
+        std::cend(values),
+        std::cbegin(widths),
+        std::string{},
+        [] (auto const& acc, auto const& str) {
+            return acc + str; },
+        [] (auto const& value, auto const& width) {
+            return left_pad(width + 1, std::to_string(value)); });
+}
+
 template <typename T>
 auto to_string(std::vector<T> const& v) -> std::string {
     if (v.empty())
         return "Empty";
-    auto res = std::accumulate(
-        std::next(std::cbegin(v)),
-        std::cend(v),
-        std::string{to_string(v.front())},
-        [first = true] (auto const& acc, auto e) mutable {
-            if constexpr (std::is_integral_v<T>) {
-                return acc + " " + to_string(e);
-            } else {
+    if constexpr (std::is_integral_v<T>) {
+        auto res = std::accumulate(
+            std::next(std::cbegin(v)),
+            std::cend(v),
+            std::string{to_string(v.front())},
+            [] (auto const& acc, auto e) {
+                return acc + " " + to_string(e); });
+        return res;
+    } else if constexpr (!std::is_integral_v<T>
+                      && !std::is_same_v<T, noun>) {
+
+        // could use range-v3 transpose here
+        auto max_digits_per_column = std::vector<int>(v.front().size(), 0);
+        int const rows = v.size();
+        int const cols = v.front().size();
+        for (int i = 0; i < cols; ++i) {
+            for (int j = 0; j < rows; ++j) {
+                max_digits_per_column[i] = std::max(
+                    max_digits_per_column[i], (int)std::to_string(v[j][i]).size());
+            }
+        }
+
+        auto res = std::accumulate(
+            std::next(std::cbegin(v)),
+            std::cend(v),
+            std::string{to_string_with_pads(v.front(), max_digits_per_column)},
+            [first = true, &max_digits_per_column]
+            (auto const& acc, auto e) mutable {
                 first = false;
                 auto const spaces = first ? ""s : "    "s;
-                return acc + "\n\r" + spaces + to_string(e);
-            }
-        });
-    return res;
+                return acc + "\n\r" + spaces +
+                    to_string_with_pads(e, max_digits_per_column);
+            });
+
+        return res;
+    }
 }
 
 auto to_string(noun_data const& n) -> std::string {
