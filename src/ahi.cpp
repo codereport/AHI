@@ -43,7 +43,7 @@ enum class ParenType : bool {
     RIGHT
 };
 
-struct variable    { std::string name;  };
+struct pronoun     { std::string name;  };
 struct adverb      { std::string glyph; };
 struct verb        { std::string glyph; };
 struct punctuation { ParenType type;    };
@@ -55,7 +55,7 @@ using token =
         verb,
         adverb,
         copula,
-        variable,
+        pronoun,
         punctuation>;
 
 using error = tl::unexpected<std::string>;
@@ -142,7 +142,7 @@ public:
     [[ nodiscard ]] auto data() const noexcept { return _data; };
 };
 
-std::unordered_map<std::string, noun> variable_list;
+std::unordered_map<std::string, noun> pronoun_list;
 
 auto to_string(noun_type const& n) -> std::string {
     switch (n) {
@@ -449,7 +449,7 @@ auto tokenize(std::string_view s) -> std::stack<token> {
             auto var = std::string{c};
             while (i + 1 < s.size() && std::isalpha(s[i+1]))
                 var += s[i++];
-            stack.push(token{variable{var}});
+            stack.push(token{pronoun{var}});
         } else if (c != ' ') {
             if (c == '(') {
                 stack.push(token{punctuation{ParenType::LEFT}});
@@ -510,8 +510,8 @@ void print_flat_tokens(std::stack<token> tokens) {
                 == ParenType::LEFT ? '(' : ')');
         } else if (std::holds_alternative<copula>(token)) {
             std::cout << APLCharSet::LEFT_ARROW;
-        } else if (std::holds_alternative<variable>(token)) {
-            std::cout << std::get<variable>(token).name;
+        } else if (std::holds_alternative<pronoun>(token)) {
+            std::cout << std::get<pronoun>(token).name;
         }
         else {
             auto const& n = std::get<noun>(token);
@@ -1207,7 +1207,7 @@ void resolve_parens(std::stack<token>& tokens) {
 auto get_noun(token const& t) -> noun {
     return std::holds_alternative<noun>(t)
         ? std::get<noun>(t)
-        : variable_list.find(std::get<variable>(t).name)->second;
+        : pronoun_list.find(std::get<pronoun>(t).name)->second;
 }
 
 auto eval(std::stack<token> tokens, bool first_level) -> noun {
@@ -1247,10 +1247,10 @@ auto eval(std::stack<token> tokens, bool first_level) -> noun {
             // process ←
             tokens.pop();
             assert(not tokens.empty());
-            assert(std::holds_alternative<variable>(tokens.top()));
-            auto const var = std::get<variable>(tokens.top());
+            assert(std::holds_alternative<pronoun>(tokens.top()));
+            auto const var = std::get<pronoun>(tokens.top());
             tokens.pop();
-            variable_list.insert({var.name, rhs});
+            pronoun_list.insert({var.name, rhs});
             tokens.push(rhs);
         } else if (std::holds_alternative<adverb>(tokens.top())) {
             auto adv = std::get<adverb>(tokens.top());
@@ -1300,8 +1300,8 @@ auto eval(std::stack<token> tokens, bool first_level) -> noun {
                     resolve_parens(tokens);
                 }
 
-                assert(std::holds_alternative<noun>    (tokens.top()) ||
-                       std::holds_alternative<variable>(tokens.top()));
+                assert(std::holds_alternative<noun>   (tokens.top()) ||
+                       std::holds_alternative<pronoun>(tokens.top()));
 
                 auto const& lhs = get_noun(tokens.top());
                 auto exp_new_subj = evaluate_dyadic(lhs, dverb, rhs);
