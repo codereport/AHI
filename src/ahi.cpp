@@ -8,6 +8,7 @@
 #include <cassert>
 #include <algorithm> // generate?, transform, unique, reverse, rotate
 #include <numeric>   // iota, accumulate, inner_product, partial_sum
+#include <cmath>     // pow
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -209,6 +210,8 @@ auto to_string(std::vector<T> const& v) -> std::string {
             });
 
         return res;
+    } else {
+        return "not implemented yet";
     }
 }
 
@@ -336,6 +339,8 @@ namespace APLCharSet {
     auto const LEFT_ARROW           = "←";
     auto const NOT                  = "~";
     auto const WITHOUT              = NOT;
+    auto const EXPONENTIAL          = "*";
+    auto const POWER                = EXPONENTIAL;
 }
 
 // TODO these aren't actually verbs
@@ -372,6 +377,7 @@ auto getAplCharFromShortCut(char c) -> std::string {
         case 'E': return FIND;
         case 'd': return FLOOR;
         case '[': return LEFT_ARROW;
+        case 'p': return POWER;
         default:  return "unkown character"s + c;
     }
 }
@@ -827,6 +833,12 @@ auto evaluate_minimum(noun const& lhs, noun const& rhs) -> expected_noun {
         "minimum"s);
 }
 
+auto evaluate_power(noun const& lhs, noun const& rhs) -> expected_noun {
+    return evaluate_transform_verb(lhs, rhs,
+        [](auto const& a, auto const& b) { return std::pow(a, b); },
+        "power"s);
+}
+
 auto evaluate_rotate(noun const& lhs,
                      noun rhs) -> expected_noun {
     if (lhs.type() == noun_type::SCALAR
@@ -1081,6 +1093,7 @@ auto evaluate_dyadic(noun    const& lhs,
     else if (verb == MAXIMUM)             return evaluate_maximum             (lhs, rhs);
     else if (verb == MINIMUM)             return evaluate_minimum             (lhs, rhs);
     else if (verb == RESHAPE)             return evaluate_reshape             (lhs, rhs);
+    else if (verb == POWER)               return evaluate_power               (lhs, rhs);
     else                           return error{"dyadic " + verb + " not supported yet"};
 }
 
@@ -1366,7 +1379,8 @@ void run_tests() {
               << unit_test("|(⍳4)-2",           "1 0 1 2")  << "\n\r"
               << unit_test("×(⍳4)-2",           "-1 0 1 1") << "\n\r"
               << unit_test("-/⍳9",              "5")        << "\n\r"
-              << unit_test("-\\⍳5",             "1 ¯1 2 ¯2 3") << "\n\r";
+              << unit_test("-\\⍳5",          "1 ¯1 2 ¯2 3") << "\n\r"
+              << unit_test("1↑3↓+/7 7⍴10*(⍳4)-1", "2221")   << "\n\r";
 
               // ⍴∘⍴¨x ← 'abc' 123 (3 3⍴⍳9)
               // (1,2>/x)⊂x ← (4⌽⍳9),2⌽⍳6  // N-Wise Reduction
