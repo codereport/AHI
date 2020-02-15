@@ -36,19 +36,23 @@ using vector = std::vector<int>; // TODO support chars
 using matrix = std::vector<vector>;
 using nested_vector = std::vector<noun>;
 
-using ad_verb = std::string; // also parents now
-using paren   = std::string; // TODO
-// using adverb  = std::string;
+using ad_verb = std::string;
 
-struct variable {
-    std::string name;
+enum class ParenType : bool {
+    LEFT,
+    RIGHT
 };
 
-struct copula {}; // no need to store ←
+struct variable    { std::string name;  };
+struct adverb      { std::string glyph; };
+struct verb        { std::string glyph; };
+struct punctuation { ParenType type;    };
+struct copula      {}; // no need to store ←
 
 using token = std::variant<noun,
                            ad_verb,  // split this out to
-                           variable, // adverb>
+                           punctuation,
+                           variable,
                            copula>;
 
 using error = tl::unexpected<std::string>;
@@ -444,7 +448,11 @@ auto tokenize(std::string_view s) -> std::stack<token> {
                 var += s[i++];
             stack.push(token{variable{var}});
         } else if (c != ' ') {
-            if (ascii_apl.count(c)) {
+            if (c == '(') {
+                stack.push(token{punctuation{ParenType::LEFT}});
+            } else if (c == ')') {
+                stack.push(token{punctuation{ParenType::RIGHT}});
+            } else if (ascii_apl.count(c)) {
                 stack.push(token{ad_verb{c}});
             } else {
                 // deal with APL char 3 char width
@@ -1101,12 +1109,13 @@ auto is_composable_with_binary_op_adverb(std::string_view s) -> bool {
 
     auto const MAX = APLCharSet::MAXIMUM;
     auto const MIN = APLCharSet::MINIMUM;
+    auto const POW = APLCharSet::POWER;
 
-    if (s == "+" || s == "-" ||
-        s == "×" || s == "÷" ||
-        s == "∧" || s == "∨" ||
-        s == MIN || s == MAX) return true;
-    return false;
+    return s == "+" || s == "-" ||
+           s == "×" || s == "÷" ||
+           s == "∧" || s == "∨" ||
+           s == MIN || s == MAX ||
+           s == POW;
 }
 
 auto is_adverb(std::string s) -> bool {
@@ -1189,10 +1198,10 @@ void resolve_parens(std::stack<token>& tokens) {
     do {
         tmp.push_back(tokens.top());
         tokens.pop();
-        if (std::holds_alternative<paren>(tmp.back())) {
-            auto token = std::get<paren>(tmp.back());
-            if      (token == ")"s) ++paren_count;
-            else if (token == "("s) --paren_count;
+        if (std::holds_alternative<punctuation>(tmp.back())) {
+            auto token = std::get<punctuation>(tmp.back());
+            if      (token.type == ParenType::RIGHT) ++paren_count;
+            else if (token.type == ParenType::LEFT) --paren_count;
         }
     } while(paren_count > 0);
     tmp.pop_back();
@@ -1215,9 +1224,9 @@ auto eval(std::stack<token> tokens, bool first_level) -> noun {
     while (not tokens.empty()) {
 
         // rhs parens
-        if (std::holds_alternative<paren>(tokens.top())) {
-            auto const& right_paren = std::get<paren>(tokens.top());
-            assert(right_paren == ")"s && "LHS paren isn't actually a paren");
+        if (std::holds_alternative<punctuation>(tokens.top())) {
+            auto const& paren = std::get<punctuation>(tokens.top());
+            assert(paren.type == ParenType::RIGHT && "LHS paren isn't actually a paren");
             resolve_parens(tokens);
         }
 
@@ -1256,25 +1265,32 @@ auto eval(std::stack<token> tokens, bool first_level) -> noun {
                 // lhs parens?
                 // TODO remove temporary hack
                 bool evaluated_adverb = false;
-                if (not tokens.empty() and std::holds_alternative<paren>(tokens.top())) {
-                    // TODO the `paren` above really just means string ATM
-                    // need to design this properly
-                    auto lhs = std::get<paren>(tokens.top());
-                    if (lhs == ")"s)
+                if (not tokens.empty()) {
+                    if (std::holds_alternative<punctuation>(tokens.top())) {
+                        // duplicated code from above
+                        auto const& paren = std::get<punctuation>(tokens.top());
+                        assert(paren.type == ParenType::RIGHT);
                         resolve_parens(tokens);
-                    else if (is_adverb(verb) &&
-                            is_composable_with_binary_op_adverb(lhs)) {
+                    } else if (is_adverb(verb) &&
+                        std::holds_alternative<ad_verb>(tokens.top())) {
+
+                        auto const& lhs = std::get<ad_verb>(tokens.top());
+                        assert(is_composable_with_binary_op_adverb(lhs));
+
                         auto exp_new_subj = [&] {
-                            if (verb == "/") return evaluate_reduce(lhs, rhs);
-                            else {
+                            if (verb == "/") {
+                                return evaluate_reduce(lhs, rhs);
+                            } else {
                                 assert(verb == "\\");
                                 return evaluate_scan(lhs, rhs);
                             }
                         } ();
+
                         if (not exp_new_subj.has_value()) {
                             std::cout << COLOR_ERROR <<exp_new_subj.error();
                             return noun{0};
                         }
+
                         tokens.pop();
                         tokens.push(exp_new_subj.value());
                         evaluated_adverb = true;
