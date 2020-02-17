@@ -289,7 +289,8 @@ enum ASCII {
 };
 
 std::unordered_set<char> ascii_apl = { '/', '\\', '+', '-', '*', ',',
-                                       '=', '(', ')', '|', '~' };
+                                       '=', '(', ')', '|', '~' , '<',
+                                       '>' };
 
 auto is_adverb(std::string s) -> bool {
     return s == "/" || s == "\\";
@@ -300,62 +301,66 @@ auto is_adverb(char c) -> bool {
 }
 
 namespace APLCharSet {
-    auto const IOTA                 = "⍳";
-    auto const INDEX_OF             = IOTA; // dyadic
-    auto const COMPOSE              = "∘";
-    auto const OUTER_PRODUCT        = "∘.";
-    auto const RANK                 = "⍤";
-    auto const DROP                 = "↓";
-    auto const SPLIT                = DROP;
-    auto const TAKE                 = "↑";
-    auto const MIX                  = TAKE;
-    auto const REDUCE               = "/";
-    auto const REPLICATE            = REDUCE;
-    auto const SCAN                 = "\\";
-    auto const EXPAND               = SCAN;
-    auto const REVERSE              = "⌽";
-    auto const ROTATE               = REVERSE;
-    auto const UNIQUE               = "∪";
-    auto const UNION                = UNIQUE;
-    auto const RAVEL                = ",";
-    auto const CATENATE             = RAVEL;
-    auto const CEILING              = "⌈";
-    auto const MAXIMUM              = CEILING;
-    auto const FLOOR                = "⌊";
-    auto const MINIMUM              = FLOOR;
-    auto const ENCLOSE              = "⊂";
-    auto const PARTITIONED_ENCLOSE  = ENCLOSE;
-    auto const FIRST                = "⊃"; // DISCLOSE ??
-    auto const PICK                 = FIRST;
-    auto const NEST                 = "⊆";
-    auto const PARTITION            = NEST;
-    auto const NOT_EQUAL_TO         = "≠";
-    auto const EQUAL_TO             = "=";
-    auto const EACH                 = "¨";
-    auto const DEPTH                = "≡";
-    auto const MATCH                = DEPTH;
-    auto const ABSOLUTE_VALUE       = "|";
-    auto const RESIDUE              = ABSOLUTE_VALUE;
-    auto const SHAPE                = "⍴";
-    auto const RESHAPE              = SHAPE;
-    auto const NEGATE               = "-";
-    auto const SUBTRACT             = NEGATE;
-    auto const CONJUGATE            = "+";
-    auto const ADD                  = CONJUGATE;
-    auto const SIGN_OF              = "×";
-    auto const MULTIPLY             = SIGN_OF;
-    auto const RECIPROCAL           = "÷";
-    auto const DIVIDE               = RECIPROCAL;
-    auto const LOGICAL_AND          = "∧";
-    auto const LOGICAL_OR           = "∨";
-    auto const ENLIST               = "∊";
-    auto const MEMBERSHIP           = ENLIST;
-    auto const FIND                 = "⍷";
-    auto const LEFT_ARROW           = "←";
-    auto const NOT                  = "~";
-    auto const WITHOUT              = NOT;
-    auto const EXPONENTIAL          = "*";
-    auto const POWER                = EXPONENTIAL;
+    auto const IOTA                  = "⍳";
+    auto const INDEX_OF              = IOTA; // dyadic
+    auto const COMPOSE               = "∘";
+    auto const OUTER_PRODUCT         = "∘.";
+    auto const RANK                  = "⍤";
+    auto const DROP                  = "↓";
+    auto const SPLIT                 = DROP;
+    auto const TAKE                  = "↑";
+    auto const MIX                   = TAKE;
+    auto const REDUCE                = "/";
+    auto const REPLICATE             = REDUCE;
+    auto const SCAN                  = "\\";
+    auto const EXPAND                = SCAN;
+    auto const REVERSE               = "⌽";
+    auto const ROTATE                = REVERSE;
+    auto const UNIQUE                = "∪";
+    auto const UNION                 = UNIQUE;
+    auto const RAVEL                 = ",";
+    auto const CATENATE              = RAVEL;
+    auto const CEILING               = "⌈";
+    auto const MAXIMUM               = CEILING;
+    auto const FLOOR                 = "⌊";
+    auto const MINIMUM               = FLOOR;
+    auto const ENCLOSE               = "⊂";
+    auto const PARTITIONED_ENCLOSE   = ENCLOSE;
+    auto const FIRST                 = "⊃"; // DISCLOSE ??
+    auto const PICK                  = FIRST;
+    auto const NEST                  = "⊆";
+    auto const PARTITION             = NEST;
+    auto const NOT_EQUAL_TO          = "≠";
+    auto const EQUAL_TO              = "=";
+    auto const EACH                  = "¨";
+    auto const DEPTH                 = "≡";
+    auto const MATCH                 = DEPTH;
+    auto const ABSOLUTE_VALUE        = "|";
+    auto const RESIDUE               = ABSOLUTE_VALUE;
+    auto const SHAPE                 = "⍴";
+    auto const RESHAPE               = SHAPE;
+    auto const NEGATE                = "-";
+    auto const SUBTRACT              = NEGATE;
+    auto const CONJUGATE             = "+";
+    auto const ADD                   = CONJUGATE;
+    auto const SIGN_OF               = "×";
+    auto const MULTIPLY              = SIGN_OF;
+    auto const RECIPROCAL            = "÷";
+    auto const DIVIDE                = RECIPROCAL;
+    auto const LOGICAL_AND           = "∧";
+    auto const LOGICAL_OR            = "∨";
+    auto const ENLIST                = "∊";
+    auto const MEMBERSHIP            = ENLIST;
+    auto const FIND                  = "⍷";
+    auto const LEFT_ARROW            = "←";
+    auto const NOT                   = "~";
+    auto const WITHOUT               = NOT;
+    auto const EXPONENTIAL           = "*";
+    auto const POWER                 = EXPONENTIAL;
+    auto const LESS_THAN             = "<";
+    auto const LESS_THAN_OR_EQUAL    = "≤";
+    auto const GREATER_THAN          = ">";
+    auto const GREATER_THAN_OR_EQUAL = "≥";
 }
 
 auto getAplCharFromShortCut(char c) -> std::string {
@@ -385,6 +390,8 @@ auto getAplCharFromShortCut(char c) -> std::string {
         case 'd': return FLOOR;
         case '[': return LEFT_ARROW;
         case 'p': return POWER;
+        case '4': return LESS_THAN_OR_EQUAL;
+        case '6': return GREATER_THAN_OR_EQUAL;
         default:  return "unkown character"s + c;
     }
 }
@@ -825,6 +832,22 @@ auto evaluate_multiply(noun const& lhs, noun const& rhs) -> expected_noun {
     return evaluate_transform_verb(lhs, rhs, std::multiplies{}, "mulitply"s);
 }
 
+auto evaluate_less_than(noun const& lhs, noun const& rhs) -> expected_noun {
+    return evaluate_transform_verb(lhs, rhs, std::less{}, "less than"s);
+}
+
+auto evaluate_less_than_or_equal(noun const& lhs, noun const& rhs) -> expected_noun {
+    return evaluate_transform_verb(lhs, rhs, std::less_equal{}, "less than or equal"s);
+}
+
+auto evaluate_greater_than(noun const& lhs, noun const& rhs) -> expected_noun {
+    return evaluate_transform_verb(lhs, rhs, std::greater{}, "greater than"s);
+}
+
+auto evaluate_greater_than_or_equal(noun const& lhs, noun const& rhs) -> expected_noun {
+    return evaluate_transform_verb(lhs, rhs, std::greater_equal{}, "greater than or equal"s);
+}
+
 auto evaluate_maximum(noun const& lhs, noun const& rhs) -> expected_noun {
     return evaluate_transform_verb(lhs, rhs,
         [](auto const& a, auto const& b) { return std::max(a, b); },
@@ -1080,24 +1103,29 @@ auto evaluate_dyadic(noun const& lhs,
                      verb const& dverb,
                      noun const& rhs) -> expected_noun {
     using namespace APLCharSet;
-    if      (dverb.glyph == CATENATE)            return evaluate_catenate            (lhs, rhs);
-    else if (dverb.glyph == TAKE)                return evaluate_take                (lhs, rhs);
-    else if (dverb.glyph == DROP)                return evaluate_drop                (lhs, rhs);
-    else if (dverb.glyph == EQUAL_TO)            return evaluate_equal_to            (lhs, rhs);
-    else if (dverb.glyph == NOT_EQUAL_TO)        return evaluate_not_equal_to        (lhs, rhs);
-    else if (dverb.glyph == ROTATE)              return evaluate_rotate              (lhs, rhs);
-    else if (dverb.glyph == MATCH)               return evaluate_match               (lhs, rhs);
-    else if (dverb.glyph == REPLICATE)           return evaluate_replicate           (lhs, rhs);
-    else if (dverb.glyph == RESIDUE)             return evaluate_residue             (lhs, rhs);
-    else if (dverb.glyph == PARTITIONED_ENCLOSE) return evaluate_partitioned_enclose (lhs, rhs);
-    else if (dverb.glyph == PARTITION)           return evaluate_partition           (lhs, rhs);
-    else if (dverb.glyph == SUBTRACT)            return evaluate_subtract            (lhs, rhs);
-    else if (dverb.glyph == ADD)                 return evaluate_add                 (lhs, rhs);
-    else if (dverb.glyph == MULTIPLY)            return evaluate_multiply            (lhs, rhs);
-    else if (dverb.glyph == MAXIMUM)             return evaluate_maximum             (lhs, rhs);
-    else if (dverb.glyph == MINIMUM)             return evaluate_minimum             (lhs, rhs);
-    else if (dverb.glyph == RESHAPE)             return evaluate_reshape             (lhs, rhs);
-    else if (dverb.glyph == POWER)               return evaluate_power               (lhs, rhs);
+    if      (dverb.glyph == CATENATE)              return evaluate_catenate              (lhs, rhs);
+    else if (dverb.glyph == TAKE)                  return evaluate_take                  (lhs, rhs);
+    else if (dverb.glyph == DROP)                  return evaluate_drop                  (lhs, rhs);
+    else if (dverb.glyph == EQUAL_TO)              return evaluate_equal_to              (lhs, rhs);
+    else if (dverb.glyph == NOT_EQUAL_TO)          return evaluate_not_equal_to          (lhs, rhs);
+    else if (dverb.glyph == ROTATE)                return evaluate_rotate                (lhs, rhs);
+    else if (dverb.glyph == MATCH)                 return evaluate_match                 (lhs, rhs);
+    else if (dverb.glyph == REPLICATE)             return evaluate_replicate             (lhs, rhs);
+    else if (dverb.glyph == RESIDUE)               return evaluate_residue               (lhs, rhs);
+    else if (dverb.glyph == PARTITIONED_ENCLOSE)   return evaluate_partitioned_enclose   (lhs, rhs);
+    else if (dverb.glyph == PARTITION)             return evaluate_partition             (lhs, rhs);
+    else if (dverb.glyph == SUBTRACT)              return evaluate_subtract              (lhs, rhs);
+    else if (dverb.glyph == ADD)                   return evaluate_add                   (lhs, rhs);
+    else if (dverb.glyph == MULTIPLY)              return evaluate_multiply              (lhs, rhs);
+    else if (dverb.glyph == MAXIMUM)               return evaluate_maximum               (lhs, rhs);
+    else if (dverb.glyph == MINIMUM)               return evaluate_minimum               (lhs, rhs);
+    else if (dverb.glyph == RESHAPE)               return evaluate_reshape               (lhs, rhs);
+    else if (dverb.glyph == POWER)                 return evaluate_power                 (lhs, rhs);
+    else if (dverb.glyph == LESS_THAN)             return evaluate_less_than             (lhs, rhs);
+    else if (dverb.glyph == LESS_THAN_OR_EQUAL)    return evaluate_less_than_or_equal    (lhs, rhs);
+    else if (dverb.glyph == GREATER_THAN)          return evaluate_greater_than          (lhs, rhs);
+    else if (dverb.glyph == GREATER_THAN_OR_EQUAL) return evaluate_greater_than_or_equal (lhs, rhs);
+
     else return error{"dyadic " + dverb.glyph + " not supported yet"};
 }
 
@@ -1110,6 +1138,8 @@ auto is_composable_with_binary_op_adverb(std::string_view s) -> bool {
     return s == "+" || s == "-" ||
            s == "×" || s == "÷" ||
            s == "∧" || s == "∨" ||
+           s == "<" || s == ">" ||
+           s == "≤" || s == "≥" ||
            s == MIN || s == MAX ||
            s == POW;
 }
@@ -1120,12 +1150,16 @@ auto get_binop(verb const& cverb) -> std::function<T(T, T)> {
     auto const MAX = APLCharSet::MAXIMUM;
     auto const MIN = APLCharSet::MINIMUM;
 
-    if      (cverb.glyph == "+") return std::plus        <T>();
-    else if (cverb.glyph == "-") return std::minus       <T>();
-    else if (cverb.glyph == "÷") return std::divides     <T>();
-    else if (cverb.glyph == "×") return std::multiplies  <T>();
-    else if (cverb.glyph == "∨") return std::logical_or  <T>();
-    else if (cverb.glyph == "∧") return std::logical_and <T>();
+    if      (cverb.glyph == "+") return std::plus          <T>();
+    else if (cverb.glyph == "<") return std::less          <T>();
+    else if (cverb.glyph == "-") return std::minus         <T>();
+    else if (cverb.glyph == ">") return std::greater       <T>();
+    else if (cverb.glyph == "÷") return std::divides       <T>();
+    else if (cverb.glyph == "≤") return std::less_equal    <T>();
+    else if (cverb.glyph == "×") return std::multiplies    <T>();
+    else if (cverb.glyph == "∨") return std::logical_or    <T>();
+    else if (cverb.glyph == "∧") return std::logical_and   <T>();
+    else if (cverb.glyph == "≥") return std::greater_equal <T>();
     else if (cverb.glyph == MAX) return [](auto const& a, auto const& b) { return std::max(a, b); };
     else if (cverb.glyph == MIN) return [](auto const& a, auto const& b) { return std::min(a, b); };
 
@@ -1388,7 +1422,8 @@ void run_tests() {
               << unit_test("×(⍳4)-2",           "-1 0 1 1") << "\n\r"
               << unit_test("-/⍳9",              "5")        << "\n\r"
               << unit_test("-\\⍳5",          "1 ¯1 2 ¯2 3") << "\n\r"
-              << unit_test("1↑3↓+/7 7⍴10*(⍳4)-1", "2221")   << "\n\r";
+              << unit_test("1↑3↓+/7 7⍴10*(⍳4)-1", "2221")   << "\n\r"
+              << unit_test(">\\⌽⍳4",           "4 1 1 1")  << "\n\r";
 
               // ⍴∘⍴¨x ← 'abc' 123 (3 3⍴⍳9)
               // (1,2>/x)⊂x ← (4⌽⍳9),2⌽⍳6  // N-Wise Reduction
