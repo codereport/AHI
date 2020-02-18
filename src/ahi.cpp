@@ -1166,16 +1166,33 @@ auto get_binop(verb const& cverb) -> std::function<T(T, T)> {
     return std::plus<T>();
 }
 
+template <typename B, typename Binop>
+auto fold_right(B f, B l, Binop binop) {
+    if (std::distance(f, l) == 1) return *f;
+    auto acc = *--l;
+    for (;;) {
+        acc = binop(*--l, acc);
+        if (f == l) break;
+    }
+    return acc;
+}
+
+template <typename I, typename O, typename Binop>
+auto scan_left_wtf(I f, I l, O o, Binop binop) {
+    *o = *f;
+    for (auto e = f + 2; e <= l; ++e)
+        *++o = fold_right(f, e, binop);
+}
+
 auto evaluate_reduce(verb const& lhs,
                      noun const& rhs) -> expected_noun {
     assert(is_composable_with_binary_op_adverb(lhs.glyph));
     if (rhs.type() == noun_type::VECTOR) {
         auto const v = std::get<vector>(rhs.data());
 
-        return std::accumulate(
-            std::next(std::cbegin(v)),
+        return fold_right(
+            std::cbegin(v),
             std::cend(v),
-            *std::cbegin(v),
             get_binop<int/*decltype(*std::begin(v))*/>(lhs));
 
     } else if (rhs.type() == noun_type::MATRIX) {
@@ -1203,7 +1220,7 @@ auto evaluate_scan(verb const& lhs,
         auto const v = std::get<vector>(rhs.data());
         auto res = v;
 
-        std::partial_sum(
+        scan_left_wtf(
             std::cbegin(v),
             std::cend(v),
             std::begin(res),
@@ -1421,9 +1438,10 @@ void run_tests() {
               << unit_test("|(⍳4)-2",           "1 0 1 2")  << "\n\r"
               << unit_test("×(⍳4)-2",           "-1 0 1 1") << "\n\r"
               << unit_test("-/⍳9",              "5")        << "\n\r"
-              << unit_test("-\\⍳5",          "1 ¯1 2 ¯2 3") << "\n\r"
+              << unit_test("-\\⍳5",          "1 -1 2 -2 3") << "\n\r"
               << unit_test("1↑3↓+/7 7⍴10*(⍳4)-1", "2221")   << "\n\r"
               << unit_test(">\\⌽⍳4",           "4 1 1 1")  << "\n\r";
+            //   << unit_test("+/0>,2 2⍴(⍳4)-3",   "2")        << "\n\r";
 
               // ⍴∘⍴¨x ← 'abc' 123 (3 3⍴⍳9)
               // (1,2>/x)⊂x ← (4⌽⍳9),2⌽⍳6  // N-Wise Reduction
