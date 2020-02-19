@@ -457,7 +457,7 @@ auto tokenize(std::string_view s) -> std::stack<token> {
         } else if (std::isalpha(c)) {
             auto var = std::string{c};
             while (i + 1 < s.size() && std::isalpha(s[i+1]))
-                var += s[i++];
+                var += s[++i];
             stack.push(token{pronoun{var}});
         } else if (c != ' ') {
             if (c == '(') {
