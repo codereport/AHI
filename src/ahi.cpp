@@ -677,7 +677,21 @@ auto evaluate_sign_of(noun const& n) -> expected_noun {
     }
 }
 
-auto evalulate_monadic(verb const& mverb,
+auto evaluate_ravel(noun const& n) -> expected_noun {
+    if (n.rank() <= 1) {
+        return n;
+    } else if (n.type() == noun_type::MATRIX) {
+        auto const m = std::get<matrix>(n.data());
+        std::vector<int> res;
+        for (auto const& row : m)
+            res.insert(res.end(), row.cbegin(), row.cend());
+        return res;
+    } else {
+        return error{"ravel not support for rank"};
+    }
+}
+
+auto evaluate_monadic(verb const& mverb,
                        noun const& n) -> expected_noun {
     using namespace APLCharSet;
     if      (mverb.glyph == IOTA)              return evaluate_iota           (n);
@@ -688,6 +702,7 @@ auto evalulate_monadic(verb const& mverb,
     else if (mverb.glyph == ABSOLUTE_VALUE)    return evaluate_absolute_value (n);
     else if (mverb.glyph == SIGN_OF)           return evaluate_sign_of        (n);
     else if (mverb.glyph == NOT)               return evaluate_not            (n);
+    else if (mverb.glyph == RAVEL)             return evaluate_ravel          (n);
     else return error{"monadic " + mverb.glyph + " not supported yet"};
 }
 
@@ -1337,7 +1352,7 @@ auto eval(std::stack<token> tokens, bool first_level) -> noun {
                                || std::holds_alternative<adverb>(tokens.top())
                                || std::holds_alternative<copula>(tokens.top())) {
                 auto const& mverb = v;
-                auto exp_new_subj = evalulate_monadic(mverb, rhs);
+                auto exp_new_subj = evaluate_monadic(mverb, rhs);
                 if (not exp_new_subj.has_value()) {
                     std::cout << COLOR_ERROR <<exp_new_subj.error();
                     return noun{0};
