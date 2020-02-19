@@ -97,6 +97,8 @@ class noun {
 
 public:
 
+    noun() { noun(scalar{0}); } // default ctor for pronoun_list[] to work
+
     noun(scalar val) :
         _data(val),
         _type(noun_type::SCALAR),
@@ -1177,8 +1179,9 @@ auto fold_right(B f, B l, Binop binop) {
     return acc;
 }
 
-template <typename I, typename O, typename Binop>
-auto scan_left_wtf(I f, I l, O o, Binop binop) {
+template <typename B, typename O, typename Binop>
+auto scan_left_wtf(B f, B l, O o, Binop binop) {
+    // TODO optimize
     *o = *f;
     for (auto e = f + 2; e <= l; ++e)
         *++o = fold_right(f, e, binop);
@@ -1301,7 +1304,7 @@ auto eval(std::stack<token> tokens, bool first_level) -> noun {
             assert(std::holds_alternative<pronoun>(tokens.top()));
             auto const var = std::get<pronoun>(tokens.top());
             tokens.pop();
-            pronoun_list.insert({var.name, rhs});
+            pronoun_list[var.name] = rhs;
             tokens.push(rhs);
         } else if (std::holds_alternative<adverb>(tokens.top())) {
             auto adv = std::get<adverb>(tokens.top());
@@ -1486,6 +1489,8 @@ int main() {
     // raw();
     // keypad(stdscr, TRUE);
     // noecho();
+
+    pronoun_list.clear();
 
     bool aplCharIncoming   = false;
     bool aplStringIncoming = false;
